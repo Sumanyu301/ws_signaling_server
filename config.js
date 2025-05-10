@@ -1,5 +1,5 @@
 // WebSocket connection configuration
-const WS_URL = process.env.WS_URL || "ws://localhost:8081";
+const WS_URL = process.env.WS_URL || "wss://ws-signaling-server.onrender.com";
 
 module.exports = {
   WS_URL,
