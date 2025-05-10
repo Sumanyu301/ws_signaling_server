@@ -8,14 +8,15 @@ const HOST = process.env.HOST || "0.0.0.0";
 const relayServer = new WebSocket.Server({
   port: PORT,
   host: HOST,
-  // Add error handling for production
   clientTracking: true,
   handleProtocols: true,
 });
 
-// Keep track of connected clients and the main server
+// Keep track of connected clients, authenticated clients, and the main server
 const clients = new Set();
+const authenticatedClients = new Set();
 let mainServer = null;
+let serverAuthCode = null;
 
 // Handle server errors
 relayServer.on("error", (error) => {
@@ -31,17 +32,43 @@ relayServer.on("connection", (ws) => {
       if (data.type === "server_identity") {
         console.log("Main server connected to relay");
         mainServer = ws;
+        serverAuthCode = data.authCode;
+        console.log("Received server auth code");
         return;
       }
 
-      // If this is from a client, forward to server if connected
-      if (mainServer && mainServer.readyState === WebSocket.OPEN) {
-        mainServer.send(message);
+      // Handle authentication requests from clients
+      if (data.type === "auth") {
+        if (mainServer && mainServer.readyState === WebSocket.OPEN) {
+          mainServer.send(message);
+        }
+        return;
       }
 
-      // If this is from the server, broadcast to all clients
-      if (ws === mainServer) {
+      // Handle authentication responses from server
+      if (data.type === "auth_response") {
         clients.forEach((client) => {
+          if (client.readyState === WebSocket.OPEN && client !== mainServer) {
+            client.send(message);
+            if (data.success) {
+              authenticatedClients.add(client);
+            }
+          }
+        });
+        return;
+      }
+
+      // If this is from a client, forward to server only if authenticated
+      if (mainServer && mainServer.readyState === WebSocket.OPEN) {
+        if (authenticatedClients.has(ws)) {
+          data.authenticated = true;
+          mainServer.send(JSON.stringify(data));
+        }
+      }
+
+      // If this is from the server, broadcast to authenticated clients
+      if (ws === mainServer) {
+        authenticatedClients.forEach((client) => {
           if (client.readyState === WebSocket.OPEN && client !== mainServer) {
             client.send(message);
           }
@@ -56,9 +83,11 @@ relayServer.on("connection", (ws) => {
     if (ws === mainServer) {
       console.log("Main server disconnected from relay");
       mainServer = null;
+      serverAuthCode = null;
     } else {
       console.log("Client disconnected from relay");
       clients.delete(ws);
+      authenticatedClients.delete(ws);
     }
   });
 
