@@ -1,11 +1,12 @@
 const WebSocket = require("ws");
 const { WS_URL } = require("./config");
+const { v4: uuidv4 } = require("uuid");
 
 // Map to store user positions
 const users = new Map();
 
-// Generate a random 6-digit code
-const authCode = Math.floor(100000 + Math.random() * 900000).toString();
+// Generate the authentication code
+const authCode = uuidv4().slice(0, 6);
 
 // Connect to the relay server
 const ws = new WebSocket(WS_URL);
@@ -13,8 +14,9 @@ const ws = new WebSocket(WS_URL);
 ws.on("open", () => {
   console.log("Connected to relay server");
   console.log("Authentication code:", authCode);
+  console.log("Share this 6-digit code with clients to connect");
 
-  // Identify this connection as the main server and send the auth code
+  // Identify this connection as the main server
   ws.send(
     JSON.stringify({
       type: "server_identity",
